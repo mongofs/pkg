@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"os"
 	"os/signal"
@@ -68,11 +69,15 @@ func New(opts ...Option) *App {
 }
 
 func (a *App) Run() error {
-	// 建立监控
+	// create a monitor context
 	var ctx context.Context
 	ctx, a.cancel = context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
-	// append to start before
+	// startbefore should be independent
+	err := a.runStartBefore(ctx)
+	if err!=nil{ return errors.Wrap(err,"app :bad ending") }
+
+	// loop startbefore stop
 	for _, hook := range a.start_before {
 		hook := hook
 		if hook.Stop != nil {
@@ -83,16 +88,8 @@ func (a *App) Run() error {
 				return hook.Stop(stopCtx)
 			})
 		}
-		if hook.Start != nil {
-			g.Go(func() error {
-				starCtx, cancel := context.WithTimeout(ctx, a.opts.startTimeOut)
-				defer cancel()
-				return hook.Start(starCtx)
-			})
-		}
 	}
-
-
+	//  loop hooks start and stop
 	for _, hook := range a.hooks {
 		hook := hook
 		if hook.Stop != nil {
@@ -111,7 +108,7 @@ func (a *App) Run() error {
 			})
 		}
 	}
-	// 没有设置信号，就关闭掉
+	// if havn't sig ,close it
 	if len(a.opts.sigs) == 0 {
 		return g.Wait()
 	}
@@ -133,6 +130,51 @@ func (a *App) Run() error {
 
 	return g.Wait()
 }
+
+// 启动前置的
+func (a *App)runStartBefore(ctx context.Context)error{
+
+	g, ctx := errgroup.WithContext(ctx)
+	for _, hook := range a.start_before {
+		hook := hook
+		if hook.Start != nil {
+			g.Go(func() error {
+				starCtx, cancel := context.WithTimeout(ctx, a.opts.startTimeOut)
+				defer cancel()
+				return hook.Start(starCtx)
+			})
+		}
+	}
+
+	return g.Wait()
+
+}
+
+func (a *App)runHooks(ctx context.Context)error {
+
+	g, ctx := errgroup.WithContext(ctx)
+	for _, hook := range a.start_before {
+		hook := hook
+		if hook.Stop != nil {
+			g.Go(func() error {
+				<-ctx.Done()
+				stopCtx, cancel := context.WithTimeout(ctx, a.opts.stopTimeOut)
+				defer cancel()
+				return hook.Stop(stopCtx)
+			})
+		}
+		if hook.Start != nil {
+			g.Go(func() error {
+				starCtx, cancel := context.WithTimeout(ctx, a.opts.startTimeOut)
+				defer cancel()
+				return hook.Start(starCtx)
+			})
+		}
+	}
+	return g.Wait()
+}
+
+
 
 func (a *App) Stop() {
 	if a.cancel != nil {
