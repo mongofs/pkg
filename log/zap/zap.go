@@ -11,16 +11,21 @@ import (
 )
 
 type MLog struct {
+	serviceName string
+	debug bool
 	*zap.Logger
 }
 
-func NewMLog() *MLog {
-	return &MLog{}
+func NewMLog(servName string,debug bool) *MLog {
+	return &MLog{
+		serviceName: servName,
+		debug:       debug,
+		Logger:      nil,
+	}
 }
 
 func (l *MLog) Start(ctx context.Context) error {
-	l.Logger = InitZapLog("服务", false)
-	fmt.Println("Log Start:",l.Logger)
+	l.Logger = getLog(l.serviceName, l.debug)
 	return nil
 }
 func (l *MLog) Stop(ctx context.Context) error {
@@ -29,7 +34,7 @@ func (l *MLog) Stop(ctx context.Context) error {
 
 //servName 服务名称
 //debug  为true时输出到终端  调试时使用
-func InitZapLog(servName string, debug bool) *zap.Logger {
+func getLog(servName string, debug bool) *zap.Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
@@ -113,16 +118,13 @@ func InitZapLog(servName string, debug bool) *zap.Logger {
 	development := zap.Development()
 	// 构造日志
 	logger := zap.New(core, caller, development)
-	logger.Info("log 初始化成功")
 	return logger
 }
 
 func getWriter(filename string) lumberjack.Logger {
 	today := time.Now().Format("20060102")
-	fmt.Println()
-	filename = fmt.Sprintf("./logs/%s/%s", today, filename)
 	return lumberjack.Logger{
-		Filename:   filename, // 日志文件路径
+		Filename:   fmt.Sprintf("./logs/%s/%s", today, filename), // 日志文件路径
 		MaxSize:    128,      // 每个日志文件保存的最大尺寸 单位：M  128
 		MaxBackups: 30,       // 日志文件最多保存多少个备份 30
 		MaxAge:     7,        // 文件最多保存多少天 7

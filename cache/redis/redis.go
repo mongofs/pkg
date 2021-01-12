@@ -61,7 +61,6 @@ func (driver *RedisDriver) Start(ctx context.Context) error {
 				timeout := 500 * time.Millisecond
 				c, err := redis.DialTimeout("tcp", addr, timeout, timeout, timeout)
 				if err != nil {
-					fmt.Println("newMasterSentinelPool sntnl.Dial() errors [", err, "]")
 					return nil, err
 				}
 				return c, nil
@@ -76,12 +75,10 @@ func (driver *RedisDriver) Start(ctx context.Context) error {
 			Dial: func() (redis.Conn, error) {
 				masterAddr, err := sntnl.MasterAddr()
 				if err != nil {
-					fmt.Println("newMasterSentinelPool Dial() masterAddr errors [", err, "]")
 					return nil, err
 				}
 				c, err := redis.Dial("tcp", masterAddr)
 				if err != nil {
-					fmt.Println("connect master addr errors [", err, "]")
 					return nil, err
 				}
 				if driver.auth {
@@ -109,13 +106,11 @@ func (driver *RedisDriver) Start(ctx context.Context) error {
 			Dial: func() (redis.Conn, error) {
 				slaveAddr, err := sntnl.SlaveAddrs()
 				if err != nil {
-					fmt.Println("newMasterSentinelPool Dial() masterAddr errors [", err, "]")
 					return nil, err
 				}
 				rand.Seed(time.Now().Unix())
 				c, err := redis.Dial("tcp", slaveAddr[rand.Intn(len(slaveAddr)-1)])
 				if err != nil {
-					fmt.Println("connect master addr errors [", err, "]")
 					return nil, err
 				}
 				if driver.auth {
@@ -140,6 +135,7 @@ func (driver *RedisDriver) Start(ctx context.Context) error {
 
 	select {
 	case <-sigSuc:
+		fmt.Println("redis-sentinal : start service success")
 		return nil
 	case err := <-sigErr:
 		return err

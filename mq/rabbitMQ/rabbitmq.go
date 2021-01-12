@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/streadway/amqp"
 	"time"
-	"user_online/pkg/log/zap"
 )
 
 var (
@@ -19,7 +18,6 @@ var (
 	defaultKey          = ""
 )
 
-var log = zap.InitZapLog("rabbitmq", true)
 
 type mq struct {
 	conn         *amqp.Connection
@@ -235,7 +233,6 @@ func NewWrapper(buffer int, opts ...MqOption) (*Wrapper, error) {
 		options:  opts,
 	}
 	r.mq = createMq(r.options...)
-	log.Info("create rabbitmq success")
 	return r, nil
 }
 
@@ -243,7 +240,6 @@ func NewWrapper(buffer int, opts ...MqOption) (*Wrapper, error) {
 func createMq(opts ...MqOption) *mq {
 	rabbitMQ, err := NewRabbitMQ(opts...)
 	if err != nil || rabbitMQ == nil {
-		log.Error("create rabbitmq connection errors : " + err.Error())
 		time.Sleep(time.Second)
 		return createMq(opts...)
 	}
@@ -261,7 +257,6 @@ func (r *Wrapper) MonitorAndStarReceiver() {
 
 	dataCh, chClose, err := r.mq.ReceiveSub()
 	if err != nil {
-		log.Error(err.Error())
 		// recreate connection
 		r.mq = createMq(r.options...)
 		r.MonitorAndStarReceiver()
@@ -274,12 +269,7 @@ func (r *Wrapper) MonitorAndStarReceiver() {
 			select {
 			case data := <-dataCh:
 				r.dataChan <- data.Body
-			case err := <-chClose:
-				if err != nil {
-					log.Error(err.Error())
-				} else {
-					log.Error("rabbitmq closenotify current errors ,but errors is nil")
-				}
+			case  <-chClose:
 				break label
 			case <-t.C:
 				fmt.Println("Rabbitmq : this thread is alive")
