@@ -30,6 +30,7 @@ type Option func(o *options)
 
 type App struct {
 	opts   options
+	start_before []Hook
 	hooks  []Hook
 	cancel func()
 }
@@ -71,6 +72,27 @@ func (a *App) Run() error {
 	var ctx context.Context
 	ctx, a.cancel = context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
+	// append to start before
+	for _, hook := range a.start_before {
+		hook := hook
+		if hook.Stop != nil {
+			g.Go(func() error {
+				<-ctx.Done()
+				stopCtx, cancel := context.WithTimeout(ctx, a.opts.stopTimeOut)
+				defer cancel()
+				return hook.Stop(stopCtx)
+			})
+		}
+		if hook.Start != nil {
+			g.Go(func() error {
+				starCtx, cancel := context.WithTimeout(ctx, a.opts.startTimeOut)
+				defer cancel()
+				return hook.Start(starCtx)
+			})
+		}
+	}
+
+
 	for _, hook := range a.hooks {
 		hook := hook
 		if hook.Stop != nil {
@@ -116,6 +138,17 @@ func (a *App) Stop() {
 	if a.cancel != nil {
 		a.cancel()
 	}
+}
+
+func (a *App) AppendStartBefore(lc LifeCycle){
+	a.start_before = append(a.start_before, Hook{
+		Start: func(ctx context.Context) error {
+			return lc.Start(ctx)
+		},
+		Stop: func(ctx context.Context) error {
+			return lc.Stop(ctx)
+		},
+	})
 }
 
 func (a *App) Append(lc LifeCycle) {
