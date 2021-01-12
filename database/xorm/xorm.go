@@ -12,7 +12,6 @@ import (
 	"log"
 	"os"
 	"time"
-	"user_online/pkg/log/jeager"
 	"xorm.io/xorm"
 )
 
@@ -104,10 +103,6 @@ func (x *XormEngine) Start(ctx context.Context) error {
 	}
 }
 
-func (x *XormEngine) SetJeager() {
-	x.AddHook(jeager.NewTracingHook())
-	return
-}
 
 func (x *XormEngine) Stop(ctx context.Context) error {
 	if x.Engine == nil {
