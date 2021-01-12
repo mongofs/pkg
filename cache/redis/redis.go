@@ -15,8 +15,6 @@ import (
 	"math/rand"
 	"os"
 	"strings"
-	"user_online/internal/app/public"
-
 	//"strconv"
 	"time"
 )
@@ -630,22 +628,6 @@ func (r *RedisDriverAlone) Rpush(key string, value interface{}) (bool, error) {
 	return true, nil
 }
 
-//获取 list 长度
-func (r *RedisDriverAlone) Llen(key string) (int, error) {
-	redisConn := r.redisPool.Get() //获取redis实例
-	defer redisConn.Close()
-	l, err := redisConn.Do("llen", key)
-	if err != nil {
-		return 0, err
-	}
-	if vv, ok := l.([]uint8); ok {
-		return public.ChangeStringToInt(string(vv)), nil
-	}
-	if vv2, ok2 := l.(int64); ok2 {
-		return int(vv2), nil
-	}
-	return 0, err
-}
 
 //移除并返回列表的第一个元素。
 func (r *RedisDriverAlone) Lpop(key string) ([]uint8, error) {
