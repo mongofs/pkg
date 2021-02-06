@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+
 type LifeCycle interface {
 	Start(context.Context) error
 	Stop(context.Context) error
@@ -30,12 +31,13 @@ type options struct {
 type Option func(o *options)
 
 type App struct {
-	opts   options
-	start_before []Hook
-	hooks  []Hook
-	cancel func()
+	opts         options // app的相关属性
+	start_before []Hook	// 这里是中间件的相关的Hook
+	hooks        []Hook // 这里是所有的服务相关serHook
+	cancel       func() // 整个服务的关闭
 }
 
+// 设置超时时间
 func SetStartTimeOut(t time.Duration) Option {
 	return func(o *options) {
 		o.startTimeOut = t
@@ -56,7 +58,6 @@ func New(opts ...Option) *App {
 			case syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT:
 				app.Stop()
 			default:
-
 			}
 		},
 	}
@@ -69,15 +70,16 @@ func New(opts ...Option) *App {
 }
 
 func (a *App) Run() error {
-	// create a monitor context
 	var ctx context.Context
 	ctx, a.cancel = context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
-	// startbefore should be independent
+	// startbefore 在启动前加载的服务应该是独立的
 	err := a.runStartBefore(ctx)
-	if err!=nil{ return errors.Wrap(err,"app :bad ending") }
+	if err != nil {
+		return errors.Wrap(err, "app :bad ending")
+	}
 
-	// loop startbefore stop
+	// 循环所有的中间件，ctx的关闭事件，如果ctx取消，就释放掉所有的中间件
 	for _, hook := range a.start_before {
 		hook := hook
 		if hook.Stop != nil {
@@ -89,7 +91,7 @@ func (a *App) Run() error {
 			})
 		}
 	}
-	//  loop hooks start and stop
+	//  循环监控所有注册的服务，启动和ctx的关闭
 	for _, hook := range a.hooks {
 		hook := hook
 		if hook.Stop != nil {
@@ -108,7 +110,7 @@ func (a *App) Run() error {
 			})
 		}
 	}
-	// if havn't sig ,close it
+	// 如果没有信号，就关闭它
 	if len(a.opts.sigs) == 0 {
 		return g.Wait()
 	}
@@ -131,9 +133,8 @@ func (a *App) Run() error {
 	return g.Wait()
 }
 
-// 启动前置的
-func (a *App)runStartBefore(ctx context.Context)error{
-
+// 启动独立中间件：mysql ，redis ，mq ping 等
+func (a *App) runStartBefore(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for _, hook := range a.start_before {
 		hook := hook
@@ -145,13 +146,12 @@ func (a *App)runStartBefore(ctx context.Context)error{
 			})
 		}
 	}
-
 	return g.Wait()
-
 }
 
-func (a *App)runHooks(ctx context.Context)error {
 
+// 启动真实服务 the real server ,include http,service
+func (a *App) runHooks(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	for _, hook := range a.start_before {
 		hook := hook
@@ -174,15 +174,16 @@ func (a *App)runHooks(ctx context.Context)error {
 	return g.Wait()
 }
 
-
-
 func (a *App) Stop() {
 	if a.cancel != nil {
 		a.cancel()
 	}
 }
 
-func (a *App) AppendStartBefore(lc LifeCycle){
+// 需要将服务进行管理，具体服务分为mysql，redis等 中间件，
+// 这些服务是独立的，应该作为startbefore来进行管理操作，
+// 具体的其他服务应该用lifecycle进行管理
+func (a *App) AppendStartBefore(lc LifeCycle) {
 	a.start_before = append(a.start_before, Hook{
 		Start: func(ctx context.Context) error {
 			return lc.Start(ctx)
