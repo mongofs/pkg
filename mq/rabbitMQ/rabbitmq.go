@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"github.com/streadway/amqp"
 	"time"
+	"os"
+	"log"
+	"context"
 )
 
 var (
@@ -297,4 +300,37 @@ func (r *Wrapper) Push(msg string) error {
 
 func (r *Wrapper) Close() {
 	r.mq.Destroy()
+}
+
+func (r *Wrapper) Start(ctx context.Context) error {
+	sigSuc := make(chan struct{})
+	sigErr := make(chan error)
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				if temerr, ok := err.(*os.PathError); ok {
+					sigErr <- temerr
+				} else {
+					log.Fatal(err)
+				}
+			}
+		}()
+		sigSuc <- struct{}{}
+	}()
+
+	select {
+	case <-sigSuc:
+		fmt.Println("redis-sentinal : start service success")
+		return nil
+	case err := <-sigErr:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("service starting is timeout")
+	}
+}
+
+func (r *Wrapper) Stop(ctx context.Context) error {
+	r.Close()
+	return nil
 }
